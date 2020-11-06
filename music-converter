@@ -1,0 +1,88 @@
+#!/bin/bash
+
+# If any option is specified which is not sort then display this help page.
+if [[ "$1" != "-s" && "$1" != "--sort" && -n "$1" ]]; then
+	echo \
+"A bash script for automatically converting music and sorting it into
+directories based on the name of the artist.
+
+How to use this script:
+1) (One-time) Change the directory names and output filetype and format in the
+   script to your liking and install \`ffmpeg\` if you don't have it.
+   
+2) cd to the directory where the input files are. Supported input filetypes
+   and formats are everything that your build of ffmpeg can understand, which
+   is typically all audio and multimedia formats you'll commonly come across.
+   
+3) (Only necessary with \`--sort\` or \`-s\`) Rename all files in the directory
+   to fit the pattern of \`<Artist> - <Title>.*\`.
+   
+4) Run the script. Specify \`--sort\` or \`-s\` if you want the converted files
+   to be sorted into directories based on the name of the artist. If not, the
+   converted files will be in the directory specified by \`\$out\`. Either way
+   the original files will be moved to \`\$original\`."
+	exit 0
+fi
+
+# If --sort or -s is specified then subdirectories for each artist will be
+# created here.
+# Example: artist_dir_prefix="/home/user/Music/Artists"
+artist_dir_prefix=""
+
+# If --sort or -s is specified but no directory is set yet then inform the user
+# and exit.
+if [[ -z "$artist_dir_prefix" && ( "$1" == "--sort" || "$1" == "-s" ) ]]; then
+	echo \
+"$1 was specified but no directory within which to sort the files was set.
+Set the variable \$artist_dir_prefix in this script before proceeding."
+	exit 1
+fi
+
+# The directories for the original files and the converted files.
+# Change these if you're so inclined.
+out="out"
+original="original"
+
+# The filetype and format for the output.
+# $out_format is passed directly to ffmpeg as the -f option (see ffmpeg
+# documentation).
+# If you don't know or care about that just leave $out_format as an empty string
+# and ffmpeg will select a format automatically.
+out_filetype="mp3"
+out_format=""
+
+# Make sure this script can be run in any directory by creating the necessary
+# subdirectories.
+mkdir -p "$out"
+mkdir -p "$original"
+
+for filename in *.*; do
+	# Extract the stem of the filename and, if it's not already present, convert
+	# the file to the specified format/filetype and place it at $outfile.
+	stem="${filename%.*}"
+	outfile="$out/$stem.$out_filetype"
+	
+	if [[ ! -e "$outfile" ]]; then
+		if [[ -n "$out_format" ]]; then
+			ffmpeg -i "$filename" -f "$out_format" -vn "$outfile"
+		else
+			ffmpeg -i "$filename" -vn "$outfile"
+		fi
+	fi
+	
+	# Store the original file away so that it won't be converted in the future.
+	mv "$filename" "$original"
+	
+	# If specified, also attempt to create a directory by the name of the artist
+	# in $artist_dir_prefix in which to put the converted files.
+	if [[ "$1" == "--sort" || "$1" == "-s" ]]; then
+		# Assume that everything in the filename before the first emdash is the
+		# name of the artist.
+		artist="${stem%% - *}"
+		artist_dir="$artist_dir_prefix/$artist"
+		
+		# Make a directory by that name, then move the converted file there.
+		mkdir -p "$artist_dir"
+		mv "$out/$stem.$out_filetype" "$artist_dir"
+	fi
+done
